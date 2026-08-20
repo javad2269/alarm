@@ -26,6 +26,14 @@ jobs:
       - name: Generate PNG from SVG
         run: node scripts/gen-assets.js
 
+      - name: Save custom Android files
+        run: |
+          mkdir -p /tmp/android-custom
+          if [ -d android ]; then cp -r android /tmp/android-custom/; fi
+
+      - name: Remove old android folder
+        run: rm -rf android
+
       - name: Add Android platform
         run: npx cap add android
 
@@ -39,15 +47,17 @@ jobs:
           sed -i "/classpath 'com.android.tools.build:gradle'/a \        classpath 'com.google.gms:google-services:4.4.0'" android/build.gradle
           echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
 
+      - name: Restore custom Android files
+        run: |
+          mkdir -p android/app/src/main/java/app/alarm/saham/
+          mkdir -p android/app/src/main/res/raw/
+          cp /tmp/android-custom/android/app/src/main/java/app/alarm/saham/MainActivity.java android/app/src/main/java/app/alarm/saham/MainActivity.java || true
+          cp /tmp/android-custom/android/app/src/main/res/raw/alarm.mp3 android/app/src/main/res/raw/alarm.mp3 || true
+
       - name: Set Persian app name
         run: |
           sed -i 's|<string name="app_name">.*</string>|<string name="app_name">هشدار سهام</string>|' android/app/src/main/res/values/strings.xml
           sed -i 's|<string name="title_activity_main">.*</string>|<string name="title_activity_main">هشدار سهام</string>|' android/app/src/main/res/values/strings.xml
-
-      - name: Copy MainActivity with Alarm Channel
-        run: |
-          mkdir -p android/app/src/main/java/app/alarm/saham/
-          cp android/app/src/main/java/app/alarm/saham/MainActivity.java android/app/src/main/java/app/alarm/saham/MainActivity.java.bak 2>/dev/null || true
 
       - name: Generate icons and splash
         run: npx capacitor-assets generate --android
