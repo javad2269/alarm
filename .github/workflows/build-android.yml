@@ -1,0 +1,63 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate PNG from SVG
+        run: node scripts/gen-assets.js
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Add google-services.json
+        env:
+          GS: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GS" > android/app/google-services.json
+
+      - name: Patch Gradle for Firebase
+        run: |
+          sed -i "/classpath 'com.android.tools.build:gradle'/a \        classpath 'com.google.gms:google-services:4.4.0'" android/build.gradle
+          echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+
+      - name: Set Persian app name
+        run: |
+          sed -i 's|<string name="app_name">.*</string>|<string name="app_name">هشدار سهام</string>|' android/app/src/main/res/values/strings.xml
+          sed -i 's|<string name="title_activity_main">.*</string>|<string name="title_activity_main">هشدار سهام</string>|' android/app/src/main/res/values/strings.xml
+
+      - name: Generate icons and splash
+        run: npx capacitor-assets generate --android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: alarm-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
