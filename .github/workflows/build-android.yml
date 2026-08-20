@@ -44,6 +44,11 @@ jobs:
           sed -i 's|<string name="app_name">.*</string>|<string name="app_name">هشدار سهام</string>|' android/app/src/main/res/values/strings.xml
           sed -i 's|<string name="title_activity_main">.*</string>|<string name="title_activity_main">هشدار سهام</string>|' android/app/src/main/res/values/strings.xml
 
+      - name: Copy MainActivity with Alarm Channel
+        run: |
+          mkdir -p android/app/src/main/java/app/alarm/saham/
+          cp android/app/src/main/java/app/alarm/saham/MainActivity.java android/app/src/main/java/app/alarm/saham/MainActivity.java.bak 2>/dev/null || true
+
       - name: Generate icons and splash
         run: npx capacitor-assets generate --android
 
