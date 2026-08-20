@@ -42,12 +42,13 @@ jobs:
           GS: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: echo "$GS" > android/app/google-services.json
 
-      - name: Patch Gradle for Firebase
+      - name: Patch Gradle for Firebase + Messaging
         run: |
           sed -i "/classpath 'com.android.tools.build:gradle'/a \        classpath 'com.google.gms:google-services:4.4.0'" android/build.gradle
           echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+          sed -i "/dependencies {/a \    implementation 'com.google.firebase:firebase-messaging:23.4.0'" android/app/build.gradle
 
-      - name: Restore MainActivity.java
+      - name: Restore custom Android files
         run: |
           mkdir -p android/app/src/main/java/app/alarm/saham/
           mkdir -p android/app/src/main/res/raw/
@@ -55,6 +56,11 @@ jobs:
             cp -r /tmp/android-custom/android/app/src/main/java/app/alarm/saham/. android/app/src/main/java/app/alarm/saham/ 2>/dev/null || true
             cp -r /tmp/android-custom/android/app/src/main/res/raw/. android/app/src/main/res/raw/ 2>/dev/null || true
           fi
+
+      - name: Patch AndroidManifest (Full-Screen Intent + Service)
+        run: |
+          sed -i 's|<application|<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <application|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|</application>|<service android:name="app.alarm.saham.AlarmMessagingService" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT"/></intent-filter></service>\n    </application>|' android/app/src/main/AndroidManifest.xml
 
       - name: Set Persian app name
         run: |
