@@ -1,0 +1,19 @@
+{
+  "appId": "app.alarm.saham",
+  "appName": "Saham Alarm",
+  "webDir": "www",
+  "server": {
+    "url": "https://alarm.bi-kalam.ir/www/"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "SplashScreen": {
+      "launchShowDuration": 2500,
+      "backgroundColor": "#667eea",
+      "splashFullScreen": true,
+      "splashImmersive": true
+    }
+  }
+}
