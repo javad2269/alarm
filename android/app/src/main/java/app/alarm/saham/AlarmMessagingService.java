@@ -29,11 +29,11 @@ import java.util.Map;
 
 public class AlarmMessagingService extends FirebaseMessagingService {
 
-    public static final String CHANNEL_ID = "price_alerts_v6";
+    public static final String CHANNEL_ID = "price_alerts_v7";
     public static final int NOTIF_ID = 9001;
     private static final long RING_MS = 60_000;
 
-    // ⭐ رشته‌های سیستمی (بدون Context.*_SERVICE → بدون خطای کامپایل)
+    // ⭐ رشته‌های سیستمی (بدون خطای کامپایل)
     private static final String POWER_SERVICE = "power";
     private static final String AUDIO_SERVICE = "audio";
     private static final String VIBRATOR_SERVICE = "vibrator";
@@ -44,9 +44,12 @@ public class AlarmMessagingService extends FirebaseMessagingService {
     private static PowerManager.WakeLock ringWakeLock = null;
     private static AlarmMessagingService instance = null;
     private static int generation = 0;
+    private static boolean ringing = false;
 
     @Override
     public void onCreate() { super.onCreate(); instance = this; }
+
+    public static boolean isRinging() { return ringing; }
 
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
@@ -102,9 +105,12 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent openPi = PendingIntent.getActivity(this, 1001, intent, flags);
 
-        // ⭐ کلید حل مشکل: دکمه و swipe هر دو به StopAlarmReceiver می‌روند
-        Intent stopIntent = new Intent(this, StopAlarmReceiver.class);
-        PendingIntent stopPi = PendingIntent.getBroadcast(this, 1002, stopIntent, flags);
+        // ⭐⭐ کلید حل مشکل: دکمه «متوجه شدم» و Swipe → MainActivity با stop_alarm
+        // (بدون نیاز به Receiver و بدون نیاز به تغییر Manifest!)
+        Intent stopIntent = new Intent(this, MainActivity.class);
+        stopIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        stopIntent.putExtra("stop_alarm", "1");
+        PendingIntent stopPi = PendingIntent.getActivity(this, 1002, stopIntent, flags);
 
         int icon = getApplicationInfo().icon;
 
@@ -118,8 +124,8 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setFullScreenIntent(openPi, true)
                 .setContentIntent(openPi)
-                .addAction(icon, "✓ متوجه شدم", stopPi)
-                .setDeleteIntent(stopPi)
+                .addAction(icon, "✓ متوجه شدم", stopPi)   // ⭐ حالا واقعاً کار می‌کند
+                .setDeleteIntent(stopPi)                  // ⭐ Swipe = قطع صدا
                 .setAutoCancel(false)
                 .setOngoing(false)
                 .setTimeoutAfter(RING_MS);
@@ -139,6 +145,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
 
     private void startAlarm() {
         stopSoundVibrationOnly();
+        ringing = true;
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null) {
@@ -182,6 +189,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
     }
 
     private static void stopSoundVibrationOnly() {
+        ringing = false;
         try { if (player != null) { if (player.isPlaying()) player.stop(); player.release(); } } catch (Exception ignored) {}
         player = null;
         try { if (vibrator != null) vibrator.cancel(); } catch (Exception ignored) {}
