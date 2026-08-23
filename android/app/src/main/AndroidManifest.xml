@@ -26,7 +26,7 @@
             </intent-filter>
         </service>
 
-        <!-- ⭐⭐ این خط حیات‌بخش است — بدون آن دکمه «متوجه شدم» هرگز کار نمی‌کند -->
+        <!-- ⭐ حیاتی: بدون این خط دکمه «متوجه شدم» هرگز کار نمی‌کند -->
         <receiver
             android:name=".StopAlarmReceiver"
             android:exported="false" />
