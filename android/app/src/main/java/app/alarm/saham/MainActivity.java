@@ -39,6 +39,7 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception ignored) {}
     }
 
+    // ⭐ پل JS: دکمه «متوجه شدم» در alarm.html صدا را قطع می‌کند
     private void attachJsInterface() {
         final Handler h = new Handler(Looper.getMainLooper());
         final int[] tries = {0};
@@ -58,9 +59,7 @@ public class MainActivity extends BridgeActivity {
 
     public static class AlarmBridge {
         @JavascriptInterface
-        public void stopAlarm() {
-            AlarmMessagingService.dismissAlarm();
-        }
+        public void stopAlarm() { AlarmMessagingService.dismissAlarm(); }
     }
 
     private void handleAlarmIntent(Intent intent) {
@@ -73,9 +72,7 @@ public class MainActivity extends BridgeActivity {
             public void run() {
                 if (getBridge() != null) {
                     getBridge().eval("window.location.href='" + url + "';",
-                            new ValueCallback<String>() {
-                                @Override public void onReceiveValue(String value) {}
-                            });
+                            new ValueCallback<String>() { @Override public void onReceiveValue(String value) {} });
                 }
             }
         }, 1500);
