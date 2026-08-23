@@ -27,8 +27,8 @@ import java.util.Map;
 
 public class AlarmMessagingService extends FirebaseMessagingService {
 
-    // ⭐ اگر صدا/تنظیمات را تغییر دادید، نسخه را بالا ببرید (کانال قدیمی غیرقابل ویرایش است)
-    public static final String CHANNEL_ID = "price_alerts_v2";
+    // ⭐ نسخه ۳ — چون کانال‌های قبلی روی گوشی خراب شده‌اند
+    public static final String CHANNEL_ID = "price_alerts_v3";
     public static final int NOTIF_ID = 9001;
     private static final long RING_MS = 60_000;
 
@@ -46,7 +46,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         instance = this;
 
-        // ⭐ اصلاح باگ ۳: WakeLock تا CPU هنگام خواب گوشی خاموش نشود
+        // WakeLock تا CPU هنگام خواب خاموش نشود
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pricealarm:msg");
         wl.acquire(RING_MS + 10_000);
@@ -56,11 +56,11 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         String body = data.containsKey("body") ? data.get("body") : "";
 
         ensureChannel(this);
-        showFullAlarm(title, body, data);
-        startLoopSound();
+        showFullAlarm(title, body, data);  // ۱) نوتیفیکیشن نمایش داده می‌شود
+        startLoopSound();                  // ۲) صدا شروع می‌شود (بدون لغو نوتیفیکیشن!)
     }
 
-    // ========== کانال با صدای معتبر (پخش توسط خود سیستم) ==========
+    // ========== کانال با صدای معتبر ==========
     public static void ensureChannel(Context ctx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager nm = (NotificationManager) ctx.getSystemService(NOTIFICATION_SERVICE);
@@ -69,7 +69,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         NotificationChannel ch = new NotificationChannel(
                 CHANNEL_ID, "هشدار قیمت (آلارم)", NotificationManager.IMPORTANCE_HIGH);
         ch.setDescription("هشدار قیمت با صدای آلارم و نمایش تمام‌صفحه");
-        ch.setBypassDnd(true);                    // ⭐ اصلاح باگ ۴: پخش در حالت مزاحم نشود
+        ch.setBypassDnd(true);
         ch.enableVibration(true);
         ch.setVibrationPattern(new long[]{0, 1000, 300, 1000, 300, 1000});
         ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
@@ -79,7 +79,6 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
 
-        // ⭐ اصلاح باگ ۱: صدای سفارشی فقط اگر فایل وجود داشت، وگرنه آلارم پیش‌فرض سیستم
         int resId = ctx.getResources().getIdentifier("alarm", "raw", ctx.getPackageName());
         Uri sound = (resId != 0)
                 ? Uri.parse("android.resource://" + ctx.getPackageName() + "/" + resId)
@@ -102,12 +101,13 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent fullScreenPending = PendingIntent.getActivity(this, 1001, intent, flags);
 
-        // دکمه «متوجه شدم» روی نوتیفیکیشن → قطع صدا
         Intent stopIntent = new Intent(this, StopAlarmReceiver.class);
         PendingIntent stopPending = PendingIntent.getBroadcast(this, 1002, stopIntent, flags);
 
+        int icon = getApplicationInfo().icon; // ⭐ آیکون معتبر برای دکمه
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(getApplicationInfo().icon)
+                .setSmallIcon(icon)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
@@ -116,7 +116,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setFullScreenIntent(fullScreenPending, true)
                 .setContentIntent(fullScreenPending)
-                .addAction(0, "✓ متوجه شدم", stopPending)
+                .addAction(icon, "✓ متوجه شدم", stopPending)
                 .setVibrate(new long[]{0, 1000, 300, 1000, 300, 1000})
                 .setOngoing(true)
                 .setAutoCancel(false)
@@ -124,7 +124,6 @@ public class AlarmMessagingService extends FirebaseMessagingService {
 
         Notification notif = builder.build();
 
-        // Foreground تا سیستم پروسس را وسط پخش صدا نکشد
         try {
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
@@ -136,9 +135,9 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         }
     }
 
-    // ========== صدای حلقه‌ای تا تأیید کاربر یا ۶۰ ثانیه ==========
+    // ========== شروع صدا — ⭐ بدون لغو نوتیفیکیشن ==========
     private void startLoopSound() {
-        stopLoopSound();
+        stopSoundOnly();
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             ringWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pricealarm:ring");
@@ -158,24 +157,35 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build());
                 player.setLooping(true);
+                player.setOnErrorListener((mp, what, extra) -> { stopSoundOnly(); return true; });
                 player.start();
-                new Handler(Looper.getMainLooper()).postDelayed(
-                        AlarmMessagingService::stopLoopSound, RING_MS);
             }
         } catch (Exception ignored) {}
+
+        // ⭐ قطع خودکار کامل بعد از ۶۰ ثانیه (صدا + نوتیفیکیشن)
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() { dismissAlarm(); }
+        }, RING_MS);
     }
 
-    public static void stopLoopSound() {
+    // فقط قطع صدا (بدون دستکاری نوتیفیکیشن)
+    private static void stopSoundOnly() {
         try { if (player != null) { player.stop(); player.release(); } } catch (Exception ignored) {}
         player = null;
         if (ringWakeLock != null && ringWakeLock.isHeld()) ringWakeLock.release();
+    }
+
+    // ⭐ قطع کامل: صدا + نوتیفیکیشن (از دکمه، پل JS یا تایم‌اوت)
+    public static void dismissAlarm() {
+        stopSoundOnly();
         if (instance != null) {
-            try { instance.stopForeground(false); } catch (Exception ignored) {}
+            try { instance.stopForeground(true); } catch (Exception ignored) {}
             NotificationManager nm = (NotificationManager) instance.getSystemService(NOTIFICATION_SERVICE);
             nm.cancel(NOTIF_ID);
         }
     }
 
     @Override
-    public void onTaskRemoved(Intent rootIntent) { stopLoopSound(); }
+    public void onTaskRemoved(Intent rootIntent) { dismissAlarm(); }
 }
