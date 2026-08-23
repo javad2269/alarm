@@ -26,14 +26,10 @@
             </intent-filter>
         </service>
 
-        <!-- ⭐ این خط حیاتی است - Receiver باید ثبت شود -->
+        <!-- ⭐⭐ این خط حیات‌بخش است — بدون آن دکمه «متوجه شدم» هرگز کار نمی‌کند -->
         <receiver
             android:name=".StopAlarmReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="app.alarm.saham.STOP_ALARM" />
-            </intent-filter>
-        </receiver>
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"
