@@ -27,18 +27,12 @@ import com.google.firebase.messaging.RemoteMessage;
 
 import java.util.Map;
 
-/**
- * سرویس دریافت پیام FCM و پخش آلارم کامل (صدا + ویبره + نوتیفیکیشن تمام‌صفحه)
- * نسخه ۴.۱ — با رشته‌های مستقیم به جای ثابت‌های Context برای جلوگیری از خطای کامپایل
- */
 public class AlarmMessagingService extends FirebaseMessagingService {
 
-    // ⭐ v4: کانال جدید ساخته می‌شود (کانال‌های قبلی غیرقابل ویرایش بودند)
     public static final String CHANNEL_ID = "price_alerts_v4";
-    public static final int NOTIF_ID = 9001;
+    public static final int NOTIF_ID = 9001;          // ⭐ ID ثابت!
     private static final long RING_MS = 60_000;
 
-    // ⭐ رشته‌های سیستمی به جای Context.*_SERVICE
     private static final String POWER_SERVICE = "power";
     private static final String AUDIO_SERVICE = "audio";
     private static final String VIBRATOR_SERVICE = "vibrator";
@@ -114,7 +108,9 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent fullScreenPending = PendingIntent.getActivity(this, 1001, intent, flags);
 
+        // ⭐ دکمه «✓ متوجه شدم» — با Intent صریح به StopAlarmReceiver
         Intent stopIntent = new Intent(this, StopAlarmReceiver.class);
+        stopIntent.setAction("app.alarm.saham.STOP_ALARM");
         PendingIntent stopPending = PendingIntent.getBroadcast(this, 1002, stopIntent, flags);
 
         int icon = getApplicationInfo().icon;
@@ -129,9 +125,9 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setFullScreenIntent(fullScreenPending, true)
                 .setContentIntent(fullScreenPending)
-                .addAction(icon, "✓ متوجه شدم", stopPending)
-                .setOngoing(true)
-                .setAutoCancel(false)
+                .addAction(icon, "✓ متوجه شدم", stopPending)   // ⭐ دکمه action
+                .setOngoing(true)                               // ⭐ قابل swipe نباشد
+                .setAutoCancel(false)                           // ⭐ با کلیک حذف نشود
                 .setTimeoutAfter(RING_MS);
 
         Notification notif = builder.build();
@@ -151,7 +147,6 @@ public class AlarmMessagingService extends FirebaseMessagingService {
     private void startAlarm() {
         stopSoundVibrationOnly();
 
-        // ⭐ صدا
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null) {
@@ -183,7 +178,6 @@ public class AlarmMessagingService extends FirebaseMessagingService {
             }
         } catch (Exception ignored) {}
 
-        // ⭐ ویبره پیوسته — با رشته "vibrator" به جای Context.VIBRATE_SERVICE
         try {
             vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null && vibrator.hasVibrator()) {
@@ -196,7 +190,6 @@ public class AlarmMessagingService extends FirebaseMessagingService {
             }
         } catch (Exception ignored) {}
 
-        // ⭐ قطع خودکار کامل بعد از ۶۰ ثانیه
         final int g = ++generation;
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
@@ -225,6 +218,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         }
     }
 
+    // ⭐ این تابع حتماً باید public static باشد تا Receiver بتواند صدا کند
     public static void dismissAlarm() {
         generation++;
         stopSoundVibrationOnly();
