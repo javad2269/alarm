@@ -6,6 +6,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.KeyEvent;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 
@@ -17,10 +18,11 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AlarmMessagingService.ensureChannel(this);
-        // ⭐ دکمه‌های ولوم در این صفحه، مستقیم صدای آلارم را کم/زیاد می‌کنند
         setVolumeControlStream(AudioManager.STREAM_ALARM);
         requestNotifPermission();
         attachJsInterface();
+        // ⭐ اگر از دکمه «متوجه شدم» یا Swipe آمده → فقط صدا را قطع کن و ببند
+        if (handleStopIntent(getIntent())) return;
         handleAlarmIntent(getIntent());
     }
 
@@ -28,8 +30,30 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        attachJsInterface();
+        if (handleStopIntent(intent)) return;
         handleAlarmIntent(intent);
+    }
+
+    // ⭐ دکمه‌های ولوم وقتی صفحه آلارم باز است = قطع کامل صدا
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if ((keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+                && AlarmMessagingService.isRinging()) {
+            AlarmMessagingService.dismissAlarm();
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    // ⭐ «متوجه شدم» روی نوتیفیکیشن / Swipe → قطع صدا بدون باز شدن صفحه
+    private boolean handleStopIntent(Intent intent) {
+        if (intent != null && "1".equals(intent.getStringExtra("stop_alarm"))) {
+            intent.removeExtra("stop_alarm");
+            AlarmMessagingService.dismissAlarm();
+            finish();
+            return true;
+        }
+        return false;
     }
 
     private void requestNotifPermission() {
@@ -42,7 +66,7 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception ignored) {}
     }
 
-    // ⭐ پل JS: دکمه «متوجه شدم» در alarm.html صدا را قطع می‌کند
+    // ⭐ پل JS: دکمه «متوجه شدم» داخل alarm.html
     private void attachJsInterface() {
         final Handler h = new Handler(Looper.getMainLooper());
         final int[] tries = {0};
