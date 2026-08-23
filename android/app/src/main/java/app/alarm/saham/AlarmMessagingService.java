@@ -29,10 +29,15 @@ import java.util.Map;
 
 public class AlarmMessagingService extends FirebaseMessagingService {
 
-    // ⭐ v5: کانال جدید تا تنظیمات صدا/ویبره از نو ساخته شود
     public static final String CHANNEL_ID = "price_alerts_v5";
     public static final int NOTIF_ID = 9001;
     private static final long RING_MS = 60_000;
+
+    // ⭐ رشته‌های سیستمی به جای Context.*_SERVICE (رفع قطعی خطای کامپایل)
+    private static final String POWER_SERVICE = "power";
+    private static final String AUDIO_SERVICE = "audio";
+    private static final String VIBRATOR_SERVICE = "vibrator";
+    private static final String NOTIFICATION_SERVICE = "notification";
 
     private static MediaPlayer player = null;
     private static Vibrator vibrator = null;
@@ -41,7 +46,10 @@ public class AlarmMessagingService extends FirebaseMessagingService {
     private static int generation = 0;
 
     @Override
-    public void onCreate() { super.onCreate(); instance = this; }
+    public void onCreate() {
+        super.onCreate();
+        instance = this;
+    }
 
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
@@ -50,7 +58,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         String title = data.containsKey("title") ? data.get("title") : "🚨 هشدار قیمت";
         String body  = data.containsKey("body")  ? data.get("body")  : "";
 
-        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         if (pm != null) {
             PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pricealarm:msg");
             wl.acquire(RING_MS + 10_000);
@@ -61,11 +69,11 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         startAlarm();
     }
 
-    // ========== کانال با صدای آلارم ==========
     public static void ensureChannel(Context ctx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(NOTIFICATION_SERVICE);
         if (nm == null || nm.getNotificationChannel(CHANNEL_ID) != null) return;
+
         NotificationChannel ch = new NotificationChannel(
                 CHANNEL_ID, "هشدار قیمت (آلارم)", NotificationManager.IMPORTANCE_HIGH);
         ch.setDescription("هشدار قیمت با صدای آلارم، ویبره و نمایش تمام‌صفحه");
@@ -73,10 +81,12 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         ch.enableVibration(true);
         ch.setVibrationPattern(new long[]{0, 900, 300, 900, 300, 900});
         ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+
         AudioAttributes aa = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
+
         int resId = ctx.getResources().getIdentifier("alarm", "raw", ctx.getPackageName());
         Uri sound = (resId != 0)
                 ? Uri.parse("android.resource://" + ctx.getPackageName() + "/" + resId)
@@ -85,10 +95,13 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         nm.createNotificationChannel(ch);
     }
 
-    // ========== نوتیفیکیشن تمام‌صفحه ==========
     private void showFullAlarm(String title, String body, Map<String, String> data) {
         StringBuilder qs = new StringBuilder("alarm.html?");
-        for (String k : data.keySet()) qs.append(k).append("=").append(data.get(k)).append("&");
+        if (data != null) {
+            for (String k : data.keySet()) {
+                qs.append(k).append("=").append(data.get(k)).append("&");
+            }
+        }
 
         Intent intent = new Intent(this, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -97,7 +110,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent openPi = PendingIntent.getActivity(this, 1001, intent, flags);
 
-        // ⭐⭐ کلید حل مشکل: این Intent هم برای دکمه و هم برای swipe استفاده می‌شود
+        // ⭐ Intent برای دکمه «متوجه شدم» و Swipe کردن
         Intent stopIntent = new Intent(this, StopAlarmReceiver.class);
         PendingIntent stopPi = PendingIntent.getBroadcast(this, 1002, stopIntent, flags);
 
@@ -113,8 +126,8 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setFullScreenIntent(openPi, true)
                 .setContentIntent(openPi)
-                .addAction(icon, "✓ متوجه شدم", stopPi)   // ⭐ دکمه قطع صدا
-                .setDeleteIntent(stopPi)                  // ⭐ swipe = قطع صدا
+                .addAction(icon, "✓ متوجه شدم", stopPi)   // دکمه قطع صدا
+                .setDeleteIntent(stopPi)                  // Swipe = قطع صدا
                 .setAutoCancel(false)
                 .setOngoing(false)
                 .setTimeoutAfter(RING_MS);
@@ -127,22 +140,23 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 startForeground(NOTIF_ID, notif);
             }
         } catch (Exception e) {
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (nm != null) nm.notify(NOTIF_ID, notif);
         }
     }
 
-    // ========== شروع صدا + ویبره ==========
     private void startAlarm() {
         stopSoundVibrationOnly();
         try {
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null) {
                 ringWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pricealarm:ring");
                 ringWakeLock.acquire(RING_MS + 5000);
             }
-            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            if (am != null) am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
+            AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+            if (am != null) {
+                am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
+            }
 
             int resId = getResources().getIdentifier("alarm", "raw", getPackageName());
             player = (resId != 0)
@@ -154,13 +168,17 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build());
                 player.setLooping(true);
-                player.setOnErrorListener((mp, w, x) -> { stopSoundVibrationOnly(); return true; });
+                player.setOnErrorListener((mp, w, x) -> {
+                    stopSoundVibrationOnly();
+                    return true;
+                });
                 player.start();
             }
         } catch (Exception ignored) {}
 
         try {
-            vibrator = (Vibrator) getSystemService(Context.VIBRATE_SERVICE);
+            // ⭐ استفاده مستقیم از رشته "vibrator"
+            vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
             if (vibrator != null && vibrator.hasVibrator()) {
                 long[] pattern = {0, 900, 300, 900, 300, 900, 500};
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -173,29 +191,45 @@ public class AlarmMessagingService extends FirebaseMessagingService {
 
         final int g = ++generation;
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override public void run() { if (g == generation) dismissAlarm(); }
+            @Override
+            public void run() {
+                if (g == generation) dismissAlarm();
+            }
         }, RING_MS);
     }
 
     private static void stopSoundVibrationOnly() {
-        try { if (player != null) { if (player.isPlaying()) player.stop(); player.release(); } } catch (Exception ignored) {}
+        try {
+            if (player != null) {
+                if (player.isPlaying()) player.stop();
+                player.release();
+            }
+        } catch (Exception ignored) {}
         player = null;
-        try { if (vibrator != null) vibrator.cancel(); } catch (Exception ignored) {}
+
+        try {
+            if (vibrator != null) vibrator.cancel();
+        } catch (Exception ignored) {}
         vibrator = null;
-        if (ringWakeLock != null && ringWakeLock.isHeld()) { try { ringWakeLock.release(); } catch (Exception ignored) {} }
+
+        if (ringWakeLock != null && ringWakeLock.isHeld()) {
+            try { ringWakeLock.release(); } catch (Exception ignored) {}
+        }
     }
 
-    // ⭐ قطع کامل از همه جا
     public static void dismissAlarm() {
         generation++;
         stopSoundVibrationOnly();
         if (instance != null) {
             try { instance.stopForeground(true); } catch (Exception ignored) {}
-            NotificationManager nm = (NotificationManager) instance.getSystemService(Context.NOTIFICATION_SERVICE);
+            NotificationManager nm = (NotificationManager) instance.getSystemService(NOTIFICATION_SERVICE);
             if (nm != null) nm.cancel(NOTIF_ID);
         }
     }
 
     @Override
-    public void onTaskRemoved(Intent rootIntent) { dismissAlarm(); super.onTaskRemoved(rootIntent); }
+    public void onTaskRemoved(Intent rootIntent) {
+        dismissAlarm();
+        super.onTaskRemoved(rootIntent);
+    }
 }
