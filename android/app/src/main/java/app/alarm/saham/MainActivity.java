@@ -1,6 +1,7 @@
 package app.alarm.saham;
 
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -16,6 +17,8 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AlarmMessagingService.ensureChannel(this);
+        // ⭐ دکمه‌های ولوم در این صفحه، مستقیم صدای آلارم را کم/زیاد می‌کنند
+        setVolumeControlStream(AudioManager.STREAM_ALARM);
         requestNotifPermission();
         attachJsInterface();
         handleAlarmIntent(getIntent());
