@@ -27,8 +27,13 @@ import com.google.firebase.messaging.RemoteMessage;
 
 import java.util.Map;
 
+/**
+ * سرویس دریافت پیام FCM و پخش آلارم کامل (صدا + ویبره + نوتیفیکیشن تمام‌صفحه)
+ * نسخه ۴ — با WakeLock، ویبره پیوسته، و کانال جدید
+ */
 public class AlarmMessagingService extends FirebaseMessagingService {
 
+    // ⭐ v4: کانال جدید ساخته می‌شود (کانال‌های قبلی غیرقابل ویرایش بودند)
     public static final String CHANNEL_ID = "price_alerts_v4";
     public static final int NOTIF_ID = 9001;
     private static final long RING_MS = 60_000;
@@ -37,16 +42,20 @@ public class AlarmMessagingService extends FirebaseMessagingService {
     private static Vibrator vibrator = null;
     private static PowerManager.WakeLock ringWakeLock = null;
     private static AlarmMessagingService instance = null;
-    private static int generation = 0;
+    private static int generation = 0; // جلوگیری از تداخل تایم‌اوت‌ها
 
     @Override
-    public void onCreate() { super.onCreate(); instance = this; }
+    public void onCreate() {
+        super.onCreate();
+        instance = this;
+    }
 
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         instance = this;
 
-        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        // WakeLock اولیه تا CPU هنگام خواب گوشی خاموش نشود
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pricealarm:msg");
         wl.acquire(RING_MS + 10_000);
 
@@ -59,10 +68,11 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         startAlarm();
     }
 
+    // ========== کانال نوتیفیکیشن (فقط یک‌بار ساخته می‌شود) ==========
     public static void ensureChannel(Context ctx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-        NotificationManager nm = (NotificationManager) ctx.getSystemService(NOTIFICATION_SERVICE);
-        if (nm.getNotificationChannel(CHANNEL_ID) != null) return;
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null || nm.getNotificationChannel(CHANNEL_ID) != null) return;
 
         NotificationChannel ch = new NotificationChannel(
                 CHANNEL_ID, "هشدار قیمت (آلارم)", NotificationManager.IMPORTANCE_HIGH);
@@ -77,6 +87,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
 
+        // صدای سفارشی در صورت وجود، وگرنه آلارم پیش‌فرض سیستم
         int resId = ctx.getResources().getIdentifier("alarm", "raw", ctx.getPackageName());
         Uri sound = (resId != 0)
                 ? Uri.parse("android.resource://" + ctx.getPackageName() + "/" + resId)
@@ -85,9 +96,12 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         nm.createNotificationChannel(ch);
     }
 
+    // ========== نوتیفیکیشن تمام‌صفحه + دکمه متوجه شدم ==========
     private void showFullAlarm(String title, String body, Map<String, String> data) {
         StringBuilder qs = new StringBuilder("alarm.html?");
-        for (String k : data.keySet()) qs.append(k).append("=").append(data.get(k)).append("&");
+        for (String k : data.keySet()) {
+            qs.append(k).append("=").append(data.get(k)).append("&");
+        }
 
         Intent intent = new Intent(this, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -96,6 +110,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent fullScreenPending = PendingIntent.getActivity(this, 1001, intent, flags);
 
+        // دکمه «✓ متوجه شدم» روی نوتیفیکیشن
         Intent stopIntent = new Intent(this, StopAlarmReceiver.class);
         PendingIntent stopPending = PendingIntent.getBroadcast(this, 1002, stopIntent, flags);
 
@@ -116,28 +131,36 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setAutoCancel(false)
                 .setTimeoutAfter(RING_MS);
 
+        Notification notif = builder.build();
+
+        // Foreground تا سیستم پروسس را وسط پخش صدا نکشد
         try {
             if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(NOTIF_ID, builder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+                startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
             } else {
-                startForeground(NOTIF_ID, builder.build());
+                startForeground(NOTIF_ID, notif);
             }
         } catch (Exception e) {
-            ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(NOTIF_ID, builder.build());
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(NOTIF_ID, notif);
         }
     }
 
-    // ========== شروع صدا + ویبره ==========
+    // ========== شروع صدا + ویبره پیوسته ==========
     private void startAlarm() {
         stopSoundVibrationOnly();
+
+        // ⭐ صدا
         try {
-            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             ringWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pricealarm:ring");
             ringWakeLock.acquire(RING_MS + 5000);
 
-            AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
-            am.setStreamVolume(AudioManager.STREAM_ALARM,
-                    am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                int max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+                am.setStreamVolume(AudioManager.STREAM_ALARM, max, 0);
+            }
 
             int resId = getResources().getIdentifier("alarm", "raw", getPackageName());
             player = (resId != 0)
@@ -149,15 +172,18 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build());
                 player.setLooping(true);
-                player.setOnErrorListener((mp, w, x) -> { stopSoundVibrationOnly(); return true; });
+                player.setOnErrorListener((mp, w, x) -> {
+                    stopSoundVibrationOnly();
+                    return true;
+                });
                 player.start();
             }
         } catch (Exception ignored) {}
 
-        // ⭐ ویبره پیوسته تا قطع
+        // ⭐ ویبره پیوسته
         try {
-            vibrator = (Vibrator) getSystemService(VIBRATE_SERVICE);
-            if (vibrator != null) {
+            vibrator = (Vibrator) getSystemService(Context.VIBRATE_SERVICE);
+            if (vibrator != null && vibrator.hasVibrator()) {
                 long[] pattern = {0, 900, 300, 900, 300, 900, 500};
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
@@ -167,32 +193,50 @@ public class AlarmMessagingService extends FirebaseMessagingService {
             }
         } catch (Exception ignored) {}
 
-        // ⭐ قطع خودکار بعد از ۶۰ ثانیه
+        // ⭐ قطع خودکار کامل بعد از ۶۰ ثانیه
         final int g = ++generation;
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override public void run() { if (g == generation) dismissAlarm(); }
+            @Override
+            public void run() {
+                if (g == generation) dismissAlarm();
+            }
         }, RING_MS);
     }
 
+    // فقط قطع صدا و ویبره (بدون لغو نوتیفیکیشن)
     private static void stopSoundVibrationOnly() {
-        try { if (player != null) { player.stop(); player.release(); } } catch (Exception ignored) {}
+        try {
+            if (player != null) {
+                if (player.isPlaying()) player.stop();
+                player.release();
+            }
+        } catch (Exception ignored) {}
         player = null;
-        try { if (vibrator != null) vibrator.cancel(); } catch (Exception ignored) {}
+
+        try {
+            if (vibrator != null) vibrator.cancel();
+        } catch (Exception ignored) {}
         vibrator = null;
-        if (ringWakeLock != null && ringWakeLock.isHeld()) ringWakeLock.release();
+
+        if (ringWakeLock != null && ringWakeLock.isHeld()) {
+            try { ringWakeLock.release(); } catch (Exception ignored) {}
+        }
     }
 
-    // ⭐ قطع کامل از همه جا: دکمه نوتیفیکیشن، پل JS، تایم‌اوت
+    // ⭐ قطع کامل از همه جا (دکمه نوتیفیکیشن، پل JS، تایم‌اوت)
     public static void dismissAlarm() {
         generation++;
         stopSoundVibrationOnly();
         if (instance != null) {
             try { instance.stopForeground(true); } catch (Exception ignored) {}
-            NotificationManager nm = (NotificationManager) instance.getSystemService(NOTIFICATION_SERVICE);
-            nm.cancel(NOTIF_ID);
+            NotificationManager nm = (NotificationManager) instance.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(NOTIF_ID);
         }
     }
 
     @Override
-    public void onTaskRemoved(Intent rootIntent) { dismissAlarm(); }
+    public void onTaskRemoved(Intent rootIntent) {
+        dismissAlarm();
+        super.onTaskRemoved(rootIntent);
+    }
 }
