@@ -39,7 +39,6 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception ignored) {}
     }
 
-    // ⭐ پل JS با تلاش مجدد تا مطمئن شویم متصل می‌شود
     private void attachJsInterface() {
         final Handler h = new Handler(Looper.getMainLooper());
         final int[] tries = {0};
