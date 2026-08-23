@@ -25,10 +25,10 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        attachJsInterface();
         handleAlarmIntent(intent);
     }
 
-    // ⭐ درخواست مجوز نوتیفیکیشن (اندروید ۱۳+) — بدون آن نوتیفیکیشن نمایش داده نمی‌شود!
     private void requestNotifPermission() {
         try {
             if (Build.VERSION.SDK_INT >= 33) {
@@ -39,18 +39,22 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception ignored) {}
     }
 
-    // ⭐ پل JS→Native: دکمه «متوجه شدم» در alarm.html صدا را قطع می‌کند
+    // ⭐ پل JS با تلاش مجدد تا مطمئن شویم متصل می‌شود
     private void attachJsInterface() {
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
+        final Handler h = new Handler(Looper.getMainLooper());
+        final int[] tries = {0};
+        final Runnable r = new Runnable() {
+            @Override public void run() {
                 try {
                     if (getBridge() != null && getBridge().getWebView() != null) {
                         getBridge().getWebView().addJavascriptInterface(new AlarmBridge(), "AndroidAlarm");
+                        return;
                     }
                 } catch (Exception ignored) {}
+                if (tries[0]++ < 5) h.postDelayed(this, 700);
             }
-        }, 2500);
+        };
+        h.post(r);
     }
 
     public static class AlarmBridge {
@@ -69,11 +73,10 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void run() {
                 if (getBridge() != null) {
-                    String js = "window.location.href='" + url + "';";
-                    getBridge().eval(js, new ValueCallback<String>() {
-                        @Override
-                        public void onReceiveValue(String value) {}
-                    });
+                    getBridge().eval("window.location.href='" + url + "';",
+                            new ValueCallback<String>() {
+                                @Override public void onReceiveValue(String value) {}
+                            });
                 }
             }
         }, 1500);
