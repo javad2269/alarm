@@ -7,6 +7,6 @@ import android.content.Intent;
 public class StopAlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        AlarmMessagingService.stopLoopSound();
+        AlarmMessagingService.dismissAlarm();
     }
 }
