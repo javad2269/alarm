@@ -1,6 +1,7 @@
 package app.alarm.saham;
 
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -15,6 +16,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AlarmMessagingService.ensureChannel(this);
+        requestNotifPermission();
         attachJsInterface();
         handleAlarmIntent(getIntent());
     }
@@ -26,7 +28,18 @@ public class MainActivity extends BridgeActivity {
         handleAlarmIntent(intent);
     }
 
-    // ⭐ پل JS→Native: صفحه alarm.html با window.AndroidAlarm.stopAlarm() صدا را قطع می‌کند
+    // ⭐ درخواست مجوز نوتیفیکیشن (اندروید ۱۳+) — بدون آن نوتیفیکیشن نمایش داده نمی‌شود!
+    private void requestNotifPermission() {
+        try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != 0) {
+                    requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 100);
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    // ⭐ پل JS→Native: دکمه «متوجه شدم» در alarm.html صدا را قطع می‌کند
     private void attachJsInterface() {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
@@ -43,7 +56,7 @@ public class MainActivity extends BridgeActivity {
     public static class AlarmBridge {
         @JavascriptInterface
         public void stopAlarm() {
-            AlarmMessagingService.stopLoopSound();
+            AlarmMessagingService.dismissAlarm();
         }
     }
 
