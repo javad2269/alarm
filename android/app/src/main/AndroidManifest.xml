@@ -26,7 +26,14 @@
             </intent-filter>
         </service>
 
-        <receiver android:name=".StopAlarmReceiver" android:exported="false" />
+        <!-- ⭐ این خط حیاتی است - Receiver باید ثبت شود -->
+        <receiver
+            android:name=".StopAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="app.alarm.saham.STOP_ALARM" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name=".MainActivity"
