@@ -5,12 +5,12 @@ import android.content.Intent;
 import android.media.RingtoneManager;
 import android.net.Uri;
 
-import com.getcapacitor.CapacitorPlugin;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
 
-@CapacitorPlugin(name = "SoundPicker")   // ⭐ بسیار مهم
+// ⭐ annotation حذف شد - Capacitor از نام کلاس استفاده می‌کند
 public class SoundPickerPlugin extends Plugin {
     private static final int REQ_PICK = 9001;
     private PluginCall pendingCall = null;
