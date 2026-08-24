@@ -27,9 +27,6 @@
             </intent-filter>
         </service>
 
-        <!-- Receiver قطع صدا (اختیاری) -->
-        <receiver android:name=".StopAlarmReceiver" android:exported="false"/>
-
         <!-- اکتیویتی اصلی -->
         <activity
             android:name=".MainActivity"
@@ -51,14 +48,5 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/>
         </provider>
 
-        <!-- 🏠 ویجت قیمت زنده (فقط اگر فایل‌های ویجت را اضافه کرده‌اید، این بلوک را نگه دارید) -->
-        <!--
-        <receiver android:name=".PriceWidgetProvider" android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
-            </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/price_widget_info"/>
-        </receiver>
-        -->
     </application>
 </manifest>
