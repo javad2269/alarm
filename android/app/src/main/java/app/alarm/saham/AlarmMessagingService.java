@@ -51,6 +51,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
     @Override public void onCreate() { super.onCreate(); instance = this; }
     public static boolean isRinging() { return ringing; }
 
+    // ===== مدیریت آهنگ داینامیک =====
     public static String getChannelId(Context ctx) {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         return "price_alerts_v" + sp.getInt(KEY_CH_VER, 7);
@@ -97,7 +98,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         int resId = ctx.getResources().getIdentifier("alarm", "raw", ctx.getPackageName());
         Uri sound = (custom != null) ? custom : (resId != 0 ? Uri.parse("android.resource://" + ctx.getPackageName() + "/" + resId) : RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
         ch.setSound(sound, aa);
-        nm.createNotificationChannel(ch);
+        nm.createChannel(ch);
     }
 
     private void showFullAlarm(String title, String body, Map<String, String> data) {
@@ -111,7 +112,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent openPi = PendingIntent.getActivity(this, 1001, intent, flags);
 
-        // ⭐ دکمه و Swipe → MainActivity با stop_alarm (که حالا handle می‌شود)
+        // دکمه «متوجه شدم» و Swipe → MainActivity با stop_alarm
         Intent stopIntent = new Intent(this, MainActivity.class);
         stopIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         stopIntent.putExtra("stop_alarm", "1");
@@ -130,6 +131,11 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setDeleteIntent(stopPi)
                 .setAutoCancel(false).setOngoing(false)
                 .setTimeoutAfter(RING_MS);
+
+        // 🏅 Badge روی آیکون
+        int badge = 0;
+        try { if (data != null && data.containsKey("badge")) badge = Integer.parseInt(data.get("badge")); } catch (Exception e) {}
+        if (badge > 0) b.setNumber(badge);
 
         Notification notif = b.build();
         try {
