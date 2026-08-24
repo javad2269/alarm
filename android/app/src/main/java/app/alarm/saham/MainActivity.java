@@ -26,7 +26,6 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         if (!hasNotificationPermission()) {
             if (Build.VERSION.SDK_INT >= 33) {
                 requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
@@ -63,7 +62,7 @@ public class MainActivity extends BridgeActivity {
     private void showBlocked() {
         new AlertDialog.Builder(this)
             .setTitle("⚠️ مجوز اعلان لازم است")
-            .setMessage("بدون مجوز اعلان، برنامه قابل استفاده نیست.\n\nهمچنین برای دریافت آلارم دقیق، به اتصال اینترنت نیاز دارید.")
+            .setMessage("بدون مجوز اعلان، برنامه قابل استفاده نیست.\n\nهمچنین برای دریافت آلارم دقیق، به اینترنت نیاز دارید.")
             .setCancelable(false)
             .setPositiveButton("باشه، خروج", (d, w) -> finish())
             .setNegativeButton("رفتن به تنظیمات", (d, w) -> {
@@ -121,8 +120,7 @@ public class MainActivity extends BridgeActivity {
             @Override public void run() {
                 try {
                     if (getBridge() != null && getBridge().getWebView() != null) {
-                        getBridge().getWebView().addJavascriptInterface(
-                            new AlarmBridge(MainActivity.this), "AndroidAlarm");
+                        getBridge().getWebView().addJavascriptInterface(new AlarmBridge(MainActivity.this), "AndroidAlarm");
                         return;
                     }
                 } catch (Exception ignored) {}
@@ -136,8 +134,7 @@ public class MainActivity extends BridgeActivity {
         runOnUiThread(() -> {
             try {
                 Intent intent = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER);
-                intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,
-                    RingtoneManager.TYPE_ALARM | RingtoneManager.TYPE_RINGTONE);
+                intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM | RingtoneManager.TYPE_RINGTONE);
                 intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "انتخاب آهنگ هشدار");
                 intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false);
                 intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true);
@@ -157,8 +154,7 @@ public class MainActivity extends BridgeActivity {
                 Uri uri = data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
                 if (uri != null) {
                     AlarmMessagingService.setSound(this, uri.toString());
-                    js = "if(window.onSoundPicked)window.onSoundPicked('" +
-                         uri.toString().replace("'", "\\'") + "')";
+                    js = "if(window.onSoundPicked)window.onSoundPicked('" + uri.toString().replace("'", "\\'") + "')";
                 } else {
                     AlarmMessagingService.setSound(this, null);
                     js = "if(window.onSoundPicked)window.onSoundPicked('')";
@@ -170,36 +166,15 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // ⭐ کلاس AlarmBridge - پل JS به جاوا (ساده و بدون ویجت)
-    // ═══════════════════════════════════════════════════════════
     public static class AlarmBridge {
         private final MainActivity activity;
-
-        public AlarmBridge(MainActivity activity) {
-            this.activity = activity;
-        }
-
-        @JavascriptInterface
-        public void stopAlarm() {
-            AlarmMessagingService.dismissAlarm();
-        }
-
-        @JavascriptInterface
-        public String getSound() {
+        public AlarmBridge(MainActivity a) { this.activity = a; }
+        @JavascriptInterface public void stopAlarm() { AlarmMessagingService.dismissAlarm(); }
+        @JavascriptInterface public String getSound() {
             Uri u = AlarmMessagingService.getSavedSoundUri(activity);
             return u == null ? "" : u.toString();
         }
-
-        @JavascriptInterface
-        public void resetSound() {
-            AlarmMessagingService.setSound(activity, null);
-        }
-
-        @JavascriptInterface
-        public void pickSound() {
-            activity.startSoundPicker();
-        }
+        @JavascriptInterface public void resetSound() { AlarmMessagingService.setSound(activity, null); }
+        @JavascriptInterface public void pickSound() { activity.startSoundPicker(); }
     }
-    // ═══════════════════════════════════════════════════════════
 }
