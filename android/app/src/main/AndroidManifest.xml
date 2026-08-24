@@ -47,22 +47,6 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/>
         </provider>
-<!-- 🏠 ویجت اختصاصی دارایی -->
-<receiver android:name=".PortfolioWidgetProvider" android:exported="true">
-    <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
-        <action android:name="app.alarm.saham.REFRESH_WIDGET"/>
-    </intent-filter>
-    <meta-data android:name="android.appwidget.provider" android:resource="@xml/portfolio_widget_info"/>
-</receiver>
 
-<activity android:name=".WidgetConfigActivity"
-    android:exported="true"
-    android:label="انتخاب نماد برای ویجت"
-    android:theme="@style/AppTheme">
-    <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE"/>
-    </intent-filter>
-</activity>
     </application>
 </manifest>
