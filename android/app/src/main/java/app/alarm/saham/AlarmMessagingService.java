@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
@@ -29,11 +30,15 @@ import java.util.Map;
 
 public class AlarmMessagingService extends FirebaseMessagingService {
 
-    public static final String CHANNEL_ID = "price_alerts_v7";
     public static final int NOTIF_ID = 9001;
     private static final long RING_MS = 60_000;
 
-    // ⭐ رشته‌های سیستمی (بدون خطای کامپایل)
+    // ===== کلیدهای SharedPreferences برای آهنگ انتخابی =====
+    public static final String PREFS = "alarm_prefs";
+    public static final String KEY_SOUND_URI = "alarm_sound_uri";
+    public static final String KEY_CH_VER = "channel_version";
+
+    // ===== رشته‌های سیستمی =====
     private static final String POWER_SERVICE = "power";
     private static final String AUDIO_SERVICE = "audio";
     private static final String VIBRATOR_SERVICE = "vibrator";
@@ -50,6 +55,27 @@ public class AlarmMessagingService extends FirebaseMessagingService {
     public void onCreate() { super.onCreate(); instance = this; }
 
     public static boolean isRinging() { return ringing; }
+
+    // ===== مدیریت آهنگ داینامیک =====
+    public static String getChannelId(Context ctx) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return "price_alerts_v" + sp.getInt(KEY_CH_VER, 7);
+    }
+
+    public static Uri getSavedSoundUri(Context ctx) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String s = sp.getString(KEY_SOUND_URI, "");
+        return (s == null || s.isEmpty()) ? null : Uri.parse(s);
+    }
+
+    public static void setSound(Context ctx, String uriString) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        int ver = sp.getInt(KEY_CH_VER, 7);
+        sp.edit()
+          .putString(KEY_SOUND_URI, uriString == null ? "" : uriString)
+          .putInt(KEY_CH_VER, ver + 1)   // ⭐ با هر تغییر آهنگ، نسخه کانال بالا می‌رود
+          .apply();
+    }
 
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
@@ -69,25 +95,35 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         startAlarm();
     }
 
+    // ===== ساخت/به‌روزرسانی کانال با آهنگ داینامیک =====
     public static void ensureChannel(Context ctx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager nm = (NotificationManager) ctx.getSystemService(NOTIFICATION_SERVICE);
-        if (nm == null || nm.getNotificationChannel(CHANNEL_ID) != null) return;
+        if (nm == null) return;
+
+        String chId = getChannelId(ctx);
+        // اگر کانال فعلی موجود است، نیازی به ساخت نیست
+        if (nm.getNotificationChannel(chId) != null) return;
+
         NotificationChannel ch = new NotificationChannel(
-                CHANNEL_ID, "هشدار قیمت (آلارم)", NotificationManager.IMPORTANCE_HIGH);
+                chId, "هشدار قیمت (آلارم)", NotificationManager.IMPORTANCE_HIGH);
         ch.setDescription("هشدار قیمت با صدای آلارم، ویبره و نمایش تمام‌صفحه");
         ch.setBypassDnd(true);
         ch.enableVibration(true);
         ch.setVibrationPattern(new long[]{0, 900, 300, 900, 300, 900});
         ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+
         AudioAttributes aa = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
+
+        // ⭐ آهنگ انتخابی کاربر یا پیش‌فرض
+        Uri custom = getSavedSoundUri(ctx);
         int resId = ctx.getResources().getIdentifier("alarm", "raw", ctx.getPackageName());
-        Uri sound = (resId != 0)
-                ? Uri.parse("android.resource://" + ctx.getPackageName() + "/" + resId)
-                : RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+        Uri sound = (custom != null) ? custom
+                  : (resId != 0 ? Uri.parse("android.resource://" + ctx.getPackageName() + "/" + resId)
+                                : RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
         ch.setSound(sound, aa);
         nm.createNotificationChannel(ch);
     }
@@ -105,8 +141,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent openPi = PendingIntent.getActivity(this, 1001, intent, flags);
 
-        // ⭐⭐ کلید حل مشکل: دکمه «متوجه شدم» و Swipe → MainActivity با stop_alarm
-        // (بدون نیاز به Receiver و بدون نیاز به تغییر Manifest!)
+        // دکمه «متوجه شدم» و Swipe → MainActivity با stop_alarm
         Intent stopIntent = new Intent(this, MainActivity.class);
         stopIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         stopIntent.putExtra("stop_alarm", "1");
@@ -114,7 +149,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
 
         int icon = getApplicationInfo().icon;
 
-        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, getChannelId(this))
                 .setSmallIcon(icon)
                 .setContentTitle(title)
                 .setContentText(body)
@@ -124,8 +159,8 @@ public class AlarmMessagingService extends FirebaseMessagingService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setFullScreenIntent(openPi, true)
                 .setContentIntent(openPi)
-                .addAction(icon, "✓ متوجه شدم", stopPi)   // ⭐ حالا واقعاً کار می‌کند
-                .setDeleteIntent(stopPi)                  // ⭐ Swipe = قطع صدا
+                .addAction(icon, "✓ متوجه شدم", stopPi)
+                .setDeleteIntent(stopPi)
                 .setAutoCancel(false)
                 .setOngoing(false)
                 .setTimeoutAfter(RING_MS);
@@ -155,10 +190,17 @@ public class AlarmMessagingService extends FirebaseMessagingService {
             AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
             if (am != null) am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
 
+            // ⭐ آهنگ انتخابی کاربر یا پیش‌فرض
+            Uri custom = getSavedSoundUri(this);
             int resId = getResources().getIdentifier("alarm", "raw", getPackageName());
-            player = (resId != 0)
-                    ? MediaPlayer.create(this, resId)
-                    : MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
+            if (custom != null) {
+                player = MediaPlayer.create(this, custom);
+            } else if (resId != 0) {
+                player = MediaPlayer.create(this, resId);
+            } else {
+                player = MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
+            }
+
             if (player != null) {
                 player.setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)
