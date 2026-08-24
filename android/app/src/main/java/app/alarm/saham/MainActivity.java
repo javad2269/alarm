@@ -1,72 +1,88 @@
 package app.alarm.saham;
 
+import android.Manifest;
+import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.KeyEvent;
+import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
+
+import androidx.core.app.NotificationManagerCompat;
 
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private static final int REQ_NOTIF = 1001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(SoundPickerPlugin.class);   // ⭐ ثبت پلاگین انتخاب آهنگ
         super.onCreate(savedInstanceState);
+
+        // ⭐ گیت مجوز اعلان: بدون مجوز برنامه اجرا نمی‌شود
+        if (!hasNotificationPermission()) {
+            if (Build.VERSION.SDK_INT >= 33) {
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+            } else {
+                showBlocked();
+            }
+            return;
+        }
+
         AlarmMessagingService.ensureChannel(this);
         setVolumeControlStream(AudioManager.STREAM_ALARM);
-        requestNotifPermission();
         attachJsInterface();
-        // ⭐ اگر از دکمه «متوجه شدم» یا Swipe آمده → فقط صدا را قطع کن و ببند
-        if (handleStopIntent(getIntent())) return;
         handleAlarmIntent(getIntent());
     }
 
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        if (handleStopIntent(intent)) return;
-        handleAlarmIntent(intent);
-    }
-
-    // ⭐ دکمه‌های ولوم وقتی صفحه آلارم باز است = قطع کامل صدا
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if ((keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)
-                && AlarmMessagingService.isRinging()) {
-            AlarmMessagingService.dismissAlarm();
-            return true;
+    private boolean hasNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
         }
-        return super.onKeyDown(keyCode, event);
+        return NotificationManagerCompat.areNotificationsEnabled(this);
     }
 
-    // ⭐ «متوجه شدم» روی نوتیفیکیشن / Swipe → قطع صدا بدون باز شدن صفحه
-    private boolean handleStopIntent(Intent intent) {
-        if (intent != null && "1".equals(intent.getStringExtra("stop_alarm"))) {
-            intent.removeExtra("stop_alarm");
-            AlarmMessagingService.dismissAlarm();
-            finish();
-            return true;
-        }
-        return false;
-    }
-
-    private void requestNotifPermission() {
-        try {
-            if (Build.VERSION.SDK_INT >= 33) {
-                if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != 0) {
-                    requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 100);
-                }
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] perms, int[] grants) {
+        super.onRequestPermissionsResult(requestCode, perms, grants);
+        if (requestCode == REQ_NOTIF) {
+            if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) {
+                // مجوز داده شد → ادامه
+                AlarmMessagingService.ensureChannel(this);
+                setVolumeControlStream(AudioManager.STREAM_ALARM);
+                attachJsInterface();
+                handleAlarmIntent(getIntent());
+            } else {
+                showBlocked();
             }
-        } catch (Exception ignored) {}
+        }
     }
 
-    // ⭐ پل JS: دکمه «متوجه شدم» داخل alarm.html
+    // ⭐ مسدودسازی کامل + پیام مجوز و اینترنت
+    private void showBlocked() {
+        new AlertDialog.Builder(this)
+            .setTitle("⚠️ مجوز اعلان لازم است")
+            .setMessage("بدون مجوز اعلان، برنامه قابل استفاده نیست.\n\n" +
+                        "همچنین برای دریافت آلارم دقیق و به‌موقع، به اتصال اینترنت نیاز دارید.")
+            .setCancelable(false)
+            .setPositiveButton("باشه، خروج", (d, w) -> finish())
+            .setNegativeButton("رفتن به تنظیمات", (d, w) -> {
+                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+                finish();
+            })
+            .show();
+    }
+
+    // ===== پل JS (دکمه متوجه شدم در alarm.html) =====
     private void attachJsInterface() {
         final Handler h = new Handler(Looper.getMainLooper());
         final int[] tries = {0};
@@ -95,11 +111,10 @@ public class MainActivity extends BridgeActivity {
         if (url == null) return;
         intent.removeExtra("alarm_url");
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
+            @Override public void run() {
                 if (getBridge() != null) {
                     getBridge().eval("window.location.href='" + url + "';",
-                            new ValueCallback<String>() { @Override public void onReceiveValue(String value) {} });
+                        new ValueCallback<String>() { @Override public void onReceiveValue(String v) {} });
                 }
             }
         }, 1500);
