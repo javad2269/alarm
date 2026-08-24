@@ -46,7 +46,8 @@ public class MainActivity extends BridgeActivity {
         if (Build.VERSION.SDK_INT >= 33) {
             return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
         }
-        return NotificationManagerCompat.areNotificationsEnabled(this);
+        // ⭐ اصلاح خطای کامپایل: from(this) اضافه شد
+        return NotificationManagerCompat.from(this).areNotificationsEnabled();
     }
 
     @Override
