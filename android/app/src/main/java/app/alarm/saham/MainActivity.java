@@ -2,9 +2,6 @@ package app.alarm.saham;
 
 import android.Manifest;
 import android.app.AlertDialog;
-import android.appwidget.AppWidgetManager;
-import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
@@ -75,7 +72,6 @@ public class MainActivity extends BridgeActivity {
             }).show();
     }
 
-    // ⚡ کنترل دکمه بازگشت
     @Override
     public void onBackPressed() {
         if (getBridge() != null && getBridge().getWebView() != null && getBridge().getWebView().canGoBack()) {
@@ -118,7 +114,6 @@ public class MainActivity extends BridgeActivity {
         handleIntent(intent);
     }
 
-    // ⭐ تزریق پل JS
     private void attachJsInterface() {
         final Handler h = new Handler(Looper.getMainLooper());
         final int[] tries = {0};
@@ -176,8 +171,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ⭐⭐⭐ کلاس AlarmBridge - پل JS به جاوا ⭐⭐⭐
-    // این کلاس به عنوان window.AndroidAlarm در JS قابل دسترس است
+    // ⭐ کلاس AlarmBridge - پل JS به جاوا (ساده و بدون ویجت)
     // ═══════════════════════════════════════════════════════════
     public static class AlarmBridge {
         private final MainActivity activity;
@@ -186,63 +180,26 @@ public class MainActivity extends BridgeActivity {
             this.activity = activity;
         }
 
-        // قطع آلارم - از دکمه «متوجه شدم» در alarm.html
         @JavascriptInterface
         public void stopAlarm() {
             AlarmMessagingService.dismissAlarm();
         }
 
-        // گرفتن URI آهنگ انتخابی
         @JavascriptInterface
         public String getSound() {
             Uri u = AlarmMessagingService.getSavedSoundUri(activity);
             return u == null ? "" : u.toString();
         }
 
-        // بازنشانی به آهنگ پیش‌فرض
         @JavascriptInterface
         public void resetSound() {
             AlarmMessagingService.setSound(activity, null);
         }
 
-        // باز کردن انتخاب‌گر آهنگ سیستم
         @JavascriptInterface
         public void pickSound() {
             activity.startSoundPicker();
         }
-
-        // ⭐ ذخیره توکن برای ویجت (ویجت از این SharedPreferences استفاده می‌کند)
-        @JavascriptInterface
-        public void saveAuthToken(String token) {
-            activity.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-                .edit().putString("api_token", token).apply();
-        }
-
-        // ⭐ refresh همه ویجت‌ها
-        @JavascriptInterface
-        public void refreshWidgets() {
-            Intent i = new Intent(activity, PortfolioWidgetProvider.class);
-            i.setAction(PortfolioWidgetProvider.ACTION_REFRESH);
-            activity.sendBroadcast(i);
-        }
-
-        // ⭐ باز کردن پیکر ویجت با انتخاب دارایی (برای دکمه 🏠 در سبد)
-        @JavascriptInterface
-        public void openWidgetPicker(final String asset, final String label) {
-            activity.runOnUiThread(new Runnable() {
-                @Override public void run() {
-                    Intent configIntent = new Intent(activity, WidgetConfigActivity.class);
-                    configIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    configIntent.putExtra("asset", asset);
-                    configIntent.putExtra("label", label);
-                    activity.startActivity(configIntent);
-                }
-            });
-        }
     }
     // ═══════════════════════════════════════════════════════════
-    // پایان کلاس AlarmBridge
-    // ═══════════════════════════════════════════════════════════
-
-    
 }
