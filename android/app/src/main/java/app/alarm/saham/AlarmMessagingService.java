@@ -98,7 +98,7 @@ public class AlarmMessagingService extends FirebaseMessagingService {
         int resId = ctx.getResources().getIdentifier("alarm", "raw", ctx.getPackageName());
         Uri sound = (custom != null) ? custom : (resId != 0 ? Uri.parse("android.resource://" + ctx.getPackageName() + "/" + resId) : RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
         ch.setSound(sound, aa);
-        nm.createChannel(ch);
+        nm.createNotificationChannel(ch); // ⭐ اصلاح شد
     }
 
     private void showFullAlarm(String title, String body, Map<String, String> data) {
