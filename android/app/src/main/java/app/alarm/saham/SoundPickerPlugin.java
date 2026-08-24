@@ -5,13 +5,12 @@ import android.content.Intent;
 import android.media.RingtoneManager;
 import android.net.Uri;
 
-import com.getcapacitor.CapacitorPlugin;   // ⭐ اضافه شد
+import com.getcapacitor.CapacitorPlugin;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
-import com.getcapacitor.PluginMethod;
 
-@CapacitorPlugin(name = "SoundPicker")   // ⭐⭐ کلید حل مشکل: نام JS می‌شود SoundPicker
+@CapacitorPlugin(name = "SoundPicker")   // ⭐ بسیار مهم
 public class SoundPickerPlugin extends Plugin {
     private static final int REQ_PICK = 9001;
     private PluginCall pendingCall = null;
