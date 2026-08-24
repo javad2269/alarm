@@ -2,6 +2,9 @@ package app.alarm.saham;
 
 import android.Manifest;
 import android.app.AlertDialog;
+import android.appwidget.AppWidgetManager;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
@@ -26,10 +29,13 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         if (!hasNotificationPermission()) {
             if (Build.VERSION.SDK_INT >= 33) {
                 requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
-            } else { showBlocked(); }
+            } else {
+                showBlocked();
+            }
             return;
         }
         initApp();
@@ -112,6 +118,7 @@ public class MainActivity extends BridgeActivity {
         handleIntent(intent);
     }
 
+    // ⭐ تزریق پل JS
     private void attachJsInterface() {
         final Handler h = new Handler(Looper.getMainLooper());
         final int[] tries = {0};
@@ -119,7 +126,8 @@ public class MainActivity extends BridgeActivity {
             @Override public void run() {
                 try {
                     if (getBridge() != null && getBridge().getWebView() != null) {
-                        getBridge().getWebView().addJavascriptInterface(new AlarmBridge(MainActivity.this), "AndroidAlarm");
+                        getBridge().getWebView().addJavascriptInterface(
+                            new AlarmBridge(MainActivity.this), "AndroidAlarm");
                         return;
                     }
                 } catch (Exception ignored) {}
@@ -133,7 +141,8 @@ public class MainActivity extends BridgeActivity {
         runOnUiThread(() -> {
             try {
                 Intent intent = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER);
-                intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM | RingtoneManager.TYPE_RINGTONE);
+                intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,
+                    RingtoneManager.TYPE_ALARM | RingtoneManager.TYPE_RINGTONE);
                 intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "انتخاب آهنگ هشدار");
                 intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false);
                 intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true);
@@ -153,25 +162,85 @@ public class MainActivity extends BridgeActivity {
                 Uri uri = data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
                 if (uri != null) {
                     AlarmMessagingService.setSound(this, uri.toString());
-                    js = "if(window.onSoundPicked)window.onSoundPicked('" + uri.toString().replace("'", "\\'") + "')";
+                    js = "if(window.onSoundPicked)window.onSoundPicked('" +
+                         uri.toString().replace("'", "\\'") + "')";
                 } else {
                     AlarmMessagingService.setSound(this, null);
                     js = "if(window.onSoundPicked)window.onSoundPicked('')";
                 }
-            } else js = "if(window.onSoundCancelled)window.onSoundCancelled()";
+            } else {
+                js = "if(window.onSoundCancelled)window.onSoundCancelled()";
+            }
             if (getBridge() != null) getBridge().eval(js, null);
         }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // ⭐⭐⭐ کلاس AlarmBridge - پل JS به جاوا ⭐⭐⭐
+    // این کلاس به عنوان window.AndroidAlarm در JS قابل دسترس است
+    // ═══════════════════════════════════════════════════════════
     public static class AlarmBridge {
         private final MainActivity activity;
-        public AlarmBridge(MainActivity a) { this.activity = a; }
-        @JavascriptInterface public void stopAlarm() { AlarmMessagingService.dismissAlarm(); }
-        @JavascriptInterface public String getSound() {
+
+        public AlarmBridge(MainActivity activity) {
+            this.activity = activity;
+        }
+
+        // قطع آلارم - از دکمه «متوجه شدم» در alarm.html
+        @JavascriptInterface
+        public void stopAlarm() {
+            AlarmMessagingService.dismissAlarm();
+        }
+
+        // گرفتن URI آهنگ انتخابی
+        @JavascriptInterface
+        public String getSound() {
             Uri u = AlarmMessagingService.getSavedSoundUri(activity);
             return u == null ? "" : u.toString();
         }
-        @JavascriptInterface public void resetSound() { AlarmMessagingService.setSound(activity, null); }
-        @JavascriptInterface public void pickSound() { activity.startSoundPicker(); }
+
+        // بازنشانی به آهنگ پیش‌فرض
+        @JavascriptInterface
+        public void resetSound() {
+            AlarmMessagingService.setSound(activity, null);
+        }
+
+        // باز کردن انتخاب‌گر آهنگ سیستم
+        @JavascriptInterface
+        public void pickSound() {
+            activity.startSoundPicker();
+        }
+
+        // ⭐ ذخیره توکن برای ویجت (ویجت از این SharedPreferences استفاده می‌کند)
+        @JavascriptInterface
+        public void saveAuthToken(String token) {
+            activity.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+                .edit().putString("api_token", token).apply();
+        }
+
+        // ⭐ refresh همه ویجت‌ها
+        @JavascriptInterface
+        public void refreshWidgets() {
+            Intent i = new Intent(activity, PortfolioWidgetProvider.class);
+            i.setAction(PortfolioWidgetProvider.ACTION_REFRESH);
+            activity.sendBroadcast(i);
+        }
+
+        // ⭐ باز کردن پیکر ویجت با انتخاب دارایی (برای دکمه 🏠 در سبد)
+        @JavascriptInterface
+        public void openWidgetPicker(final String asset, final String label) {
+            activity.runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    Intent configIntent = new Intent(activity, WidgetConfigActivity.class);
+                    configIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    configIntent.putExtra("asset", asset);
+                    configIntent.putExtra("label", label);
+                    activity.startActivity(configIntent);
+                }
+            });
+        }
     }
+    // ═══════════════════════════════════════════════════════════
+    // پایان کلاس AlarmBridge
+    // ═══════════════════════════════════════════════════════════
 }
