@@ -26,13 +26,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         if (!hasNotificationPermission()) {
             if (Build.VERSION.SDK_INT >= 33) {
                 requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
-            } else {
-                showBlocked();
-            }
+            } else { showBlocked(); }
             return;
         }
         initApp();
@@ -46,17 +43,16 @@ public class MainActivity extends BridgeActivity {
     }
 
     private boolean hasNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= 33) {
+        if (Build.VERSION.SDK_INT >= 33)
             return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        }
         return NotificationManagerCompat.from(this).areNotificationsEnabled();
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] perms, int[] grants) {
-        super.onRequestPermissionsResult(requestCode, perms, grants);
-        if (requestCode == REQ_NOTIF) {
-            if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) initApp();
+    public void onRequestPermissionsResult(int rc, String[] p, int[] g) {
+        super.onRequestPermissionsResult(rc, p, g);
+        if (rc == REQ_NOTIF) {
+            if (g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED) initApp();
             else showBlocked();
         }
     }
@@ -64,14 +60,28 @@ public class MainActivity extends BridgeActivity {
     private void showBlocked() {
         new AlertDialog.Builder(this)
             .setTitle("⚠️ مجوز اعلان لازم است")
-            .setMessage("بدون مجوز اعلان، برنامه قابل استفاده نیست.\n\nهمچنین برای دریافت آلارم دقیق و به‌موقع، به اتصال اینترنت نیاز دارید.")
+            .setMessage("بدون مجوز اعلان، برنامه قابل استفاده نیست.\n\nهمچنین برای دریافت آلارم دقیق، به اتصال اینترنت نیاز دارید.")
             .setCancelable(false)
             .setPositiveButton("باشه، خروج", (d, w) -> finish())
             .setNegativeButton("رفتن به تنظیمات", (d, w) -> {
                 startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
                 finish();
-            })
-            .show();
+            }).show();
+    }
+
+    // ⚡ کنترل دکمه بازگشت
+    @Override
+    public void onBackPressed() {
+        if (getBridge() != null && getBridge().getWebView() != null && getBridge().getWebView().canGoBack()) {
+            getBridge().getWebView().goBack();
+        } else {
+            new AlertDialog.Builder(this)
+                .setTitle("خروج از برنامه")
+                .setMessage("آیا می‌خواهید از برنامه خارج شوید؟")
+                .setPositiveButton("خروج", (d, w) -> finish())
+                .setNegativeButton("انصراف", null)
+                .show();
+        }
     }
 
     private void handleIntent(Intent intent) {
@@ -87,10 +97,9 @@ public class MainActivity extends BridgeActivity {
         intent.removeExtra("alarm_url");
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override public void run() {
-                if (getBridge() != null) {
+                if (getBridge() != null)
                     getBridge().eval("window.location.href='" + url + "';",
                         new ValueCallback<String>() { @Override public void onReceiveValue(String v) {} });
-                }
             }
         }, 1500);
     }
@@ -103,7 +112,6 @@ public class MainActivity extends BridgeActivity {
         handleIntent(intent);
     }
 
-    // ===== تزریق پل JS (همان پل قابل‌اعتماد) =====
     private void attachJsInterface() {
         final Handler h = new Handler(Looper.getMainLooper());
         final int[] tries = {0};
@@ -121,7 +129,6 @@ public class MainActivity extends BridgeActivity {
         h.post(r);
     }
 
-    // ===== ⭐ باز کردن انتخاب‌گر آهنگ سیستم =====
     public void startSoundPicker() {
         runOnUiThread(() -> {
             try {
@@ -138,11 +145,11 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQ_SOUND) {
+    protected void onActivityResult(int rc, int res, Intent data) {
+        super.onActivityResult(rc, res, data);
+        if (rc == REQ_SOUND) {
             String js;
-            if (resultCode == RESULT_OK && data != null) {
+            if (res == RESULT_OK && data != null) {
                 Uri uri = data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
                 if (uri != null) {
                     AlarmMessagingService.setSound(this, uri.toString());
@@ -151,31 +158,20 @@ public class MainActivity extends BridgeActivity {
                     AlarmMessagingService.setSound(this, null);
                     js = "if(window.onSoundPicked)window.onSoundPicked('')";
                 }
-            } else {
-                js = "if(window.onSoundCancelled)window.onSoundCancelled()";
-            }
+            } else js = "if(window.onSoundCancelled)window.onSoundCancelled()";
             if (getBridge() != null) getBridge().eval(js, null);
         }
     }
 
-    // ===== ⭐ پل JS با متدهای صدا =====
     public static class AlarmBridge {
         private final MainActivity activity;
-        public AlarmBridge(MainActivity activity) { this.activity = activity; }
-
-        @JavascriptInterface
-        public void stopAlarm() { AlarmMessagingService.dismissAlarm(); }
-
-        @JavascriptInterface
-        public String getSound() {
+        public AlarmBridge(MainActivity a) { this.activity = a; }
+        @JavascriptInterface public void stopAlarm() { AlarmMessagingService.dismissAlarm(); }
+        @JavascriptInterface public String getSound() {
             Uri u = AlarmMessagingService.getSavedSoundUri(activity);
             return u == null ? "" : u.toString();
         }
-
-        @JavascriptInterface
-        public void resetSound() { AlarmMessagingService.setSound(activity, null); }
-
-        @JavascriptInterface
-        public void pickSound() { activity.startSoundPicker(); }
+        @JavascriptInterface public void resetSound() { AlarmMessagingService.setSound(activity, null); }
+        @JavascriptInterface public void pickSound() { activity.startSoundPicker(); }
     }
 }
