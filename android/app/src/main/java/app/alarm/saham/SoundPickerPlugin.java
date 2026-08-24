@@ -5,10 +5,10 @@ import android.content.Intent;
 import android.media.RingtoneManager;
 import android.net.Uri;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
-import com.getcapacitor.JSObject;
 
 public class SoundPickerPlugin extends Plugin {
     private static final int REQ_PICK = 9001;
@@ -18,8 +18,7 @@ public class SoundPickerPlugin extends Plugin {
     public void pickSound(PluginCall call) {
         pendingCall = call;
         Intent intent = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER);
-        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,
-                RingtoneManager.TYPE_ALARM | RingtoneManager.TYPE_RINGTONE);
+        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM | RingtoneManager.TYPE_RINGTONE);
         intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "انتخاب آهنگ هشدار");
         intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false);
         intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true);
@@ -54,14 +53,8 @@ public class SoundPickerPlugin extends Plugin {
                     AlarmMessagingService.setSound(getContext(), uri.toString());
                     ret.put("uri", uri.toString());
                     ret.put("isDefault", false);
-                } else {
-                    ret.put("uri", "");
-                    ret.put("isDefault", true);
-                }
-            } else {
-                ret.put("uri", "");
-                ret.put("cancelled", true);
-            }
+                } else { ret.put("uri", ""); ret.put("isDefault", true); }
+            } else { ret.put("uri", ""); ret.put("cancelled", true); }
             if (pendingCall != null) pendingCall.resolve(ret);
             pendingCall = null;
         } else {
