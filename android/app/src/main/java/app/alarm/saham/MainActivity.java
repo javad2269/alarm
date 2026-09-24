@@ -169,12 +169,76 @@ public class MainActivity extends BridgeActivity {
     public static class AlarmBridge {
         private final MainActivity activity;
         public AlarmBridge(MainActivity a) { this.activity = a; }
+
         @JavascriptInterface public void stopAlarm() { AlarmMessagingService.dismissAlarm(); }
+
         @JavascriptInterface public String getSound() {
             Uri u = AlarmMessagingService.getSavedSoundUri(activity);
             return u == null ? "" : u.toString();
         }
+
         @JavascriptInterface public void resetSound() { AlarmMessagingService.setSound(activity, null); }
+
         @JavascriptInterface public void pickSound() { activity.startSoundPicker(); }
+
+        // ⭐ جدید: ذخیره عکس base64 در گالری
+        @JavascriptInterface
+        public void saveBase64Image(final String base64Data, final String fileName) {
+            try {
+                byte[] bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+                final String savedPath;
+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    // اندروید 10+ : استفاده از MediaStore
+                    android.content.ContentValues cv = new android.content.ContentValues();
+                    cv.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, fileName);
+                    cv.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png");
+                    cv.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                        android.os.Environment.DIRECTORY_PICTURES + "/BkAlarm");
+
+                    android.net.Uri uri = activity.getContentResolver().insert(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+                    if (uri == null) throw new Exception("MediaStore insert failed");
+
+                    java.io.OutputStream os = activity.getContentResolver().openOutputStream(uri);
+                    if (os == null) throw new Exception("openOutputStream returned null");
+                    os.write(bytes);
+                    os.close();
+                    savedPath = "Pictures/BkAlarm/" + fileName;
+                } else {
+                    // اندروید 9 و پایین‌تر
+                    java.io.File picsDir = android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_PICTURES);
+                    java.io.File dir = new java.io.File(picsDir, "BkAlarm");
+                    if (!dir.exists()) dir.mkdirs();
+                    java.io.File out = new java.io.File(dir, fileName);
+                    java.io.FileOutputStream fos = new java.io.FileOutputStream(out);
+                    fos.write(bytes);
+                    fos.close();
+
+                    android.media.MediaScannerConnection.scanFile(
+                        activity, new String[]{out.getAbsolutePath()}, null, null);
+                    savedPath = "Pictures/BkAlarm/" + fileName;
+                }
+
+                final String finalPath = savedPath;
+                activity.runOnUiThread(new Runnable() {
+                    public void run() {
+                        android.widget.Toast.makeText(activity,
+                            "✓ ذخیره شد در گالری: " + finalPath,
+                            android.widget.Toast.LENGTH_LONG).show();
+                    }
+                });
+            } catch (final Exception e) {
+                e.printStackTrace();
+                activity.runOnUiThread(new Runnable() {
+                    public void run() {
+                        android.widget.Toast.makeText(activity,
+                            "خطا در ذخیره: " + e.getMessage(),
+                            android.widget.Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        }
     }
 }
